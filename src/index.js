@@ -38,13 +38,6 @@ const InboundMessageTypes = {
   BROADCASTING_EVENT: 7
 }
 
-
-
-
-
-
-
-
 /** Class representing a outbound message to the ACC instance. 
 * Consists of a Buffer that the bytes gets written to and a offset property that controls the size of the buffer.
 */
@@ -144,6 +137,103 @@ class ACCMessageInbound {
   }
 }
 
+class CarInfo {
+  constructor(carIndex) {
+    this.carIndex = carIndex;
+    this.carModelType = null;
+    this.teamName = '';
+    this.raceNumber = null;
+    this.cupCategory = null;
+    this.currentDriverIndex = null;
+    this.drivers = []; // DriverInfo list
+    this.nationality = null;
+  }
+}
+
+class DriverInfo {
+  constructor() {
+    this.firstName = '';
+    this.lastName = '';
+    this.shortName = '';
+    this.category = null;
+    this.nationality = null;
+  }
+}
+
+class LapInfo {
+  constructor() {
+    this.laptimeMS = null;
+    this.splits = []; // Int list
+    this.carIndex = null;
+    this.driverIndex = null;
+    this.isInvalid = null;
+    this.isValidForBest = null;
+    this.type = null;
+  }
+}
+
+class RealtimeUpdate {
+  constructor() {
+    this.EventIndex = null;
+    this.SessionIndex = null;
+    this.phase = null;
+    this.sessionTime = null;
+    this.remainingTime = null;
+    this.timeOfDay = null;
+    this.rainLevel = null;
+    this.clouds = null;
+    this.wetness = null;
+    this.bestSessionLap = null;
+    this.bestLapCarIndex = null;
+    this.bestLapDriverIndex = null;
+    this.focusedCarIndex = null;
+    this.activeCameraSet = '';
+    this.activeCamera = '';
+    this.isReplayPlaying = false;
+    this.replaySessionTime = null;
+    this.replayRemainingTime = null;
+    this.sessionRemainingTime = null;
+    this.sessionEndTime = null;
+    this.sessionType = null;
+    this.ambientTemp = null;
+    this.trackTemp = null;
+    this.currentHudPage = '';
+  }
+}
+
+class RealtimeCarUpdate {
+  constructor() {
+    this.carIndex = null;
+    this.driverIndex = null;
+    this.gear = null;
+    this.worldPosX = null;
+    this.worldPosY = null;
+    this.yaw = null;
+    this.carLocation = null;
+    this.kmh = null;
+    this.position = null;
+    this.trackPosition = null;
+    this.splinePosition = null;
+    this.delta = null;
+    this.bestSessionLap = null;
+    this.lastLap = null;
+    this.currentLap = null;
+    this.laps = null;
+    this.cupPosition = null;
+    this.driverCount = null;
+  }
+}
+
+class TrackData {
+  constructor() {
+    this.trackName = '';
+    this.trackId = null;
+    this.trackMeters = null;
+    this.cameraSets = []; // CameraSet list
+    this.hudPages = []; // HudPage list
+  }
+}
+
 
 class ACRemoteTelemetryClient extends EventEmitter {
   constructor(connectionId) {
@@ -151,6 +241,8 @@ class ACRemoteTelemetryClient extends EventEmitter {
 
     this.connectionId = connectionId;
     this.client = dgram.createSocket('udp4');
+
+    this.entryListCars = [];
   }
 
   start() {
@@ -209,12 +301,50 @@ class ACRemoteTelemetryClient extends EventEmitter {
 
         this.requestEntryList();
         break;
-      case InboundMessageTypes.ENTRY_LIST_CAR:
-        const carId = message.readUInt16LE();
-        const carModel = message.readUInt8();
-        const name = message.readString();
+      case InboundMessageTypes.ENTRY_LIST:
+        console.log('ENTRY_LIST');
 
-        console.log(carId, carModel, name);
+        this.entryListCars = [];
+        
+        const connectionId = message.readInt32LE();
+        const carCount = message.readUInt16LE();
+        for (let i = 0; i < carCount; i++) {
+          const carInfo = new CarInfo(message.readUInt16LE());
+
+          this.entryListCars.push(carInfo); 
+        }
+
+        break;
+      case InboundMessageTypes.ENTRY_LIST_CAR:
+        console.log('ENTRY_LIST_CAR');
+
+        const carId = message.readUInt16LE();
+        const carInfo = this.entryListCars.find(car => car.carIndex === carId);
+        if (!carInfo) {
+          console.log(`Entry list update for unknown carIndex ${carId}`);
+          break;
+        }
+        
+        carInfo.carModelType = message.readUInt8(); // TODO: validade id it the same as readByte()
+        carInfo.teamName = message.readString();
+        carInfo.raceNumber = message.readInt32LE();
+        carInfo.cupCategory = message.readUInt8(); // TODO: validade id it the same as readByte()
+        carInfo.currentDriverIndex = message.readUInt8(); // TODO: validade id it the same as readByte()
+        carInfo.nationality = message.readUInt16LE();
+
+        const driverCount = message.readUInt8();
+        for (let i = 0; i < driverCount; i++) {
+          const driverInfo = new DriverInfo();
+
+          driverInfo.firstName = message.readString();
+          driverInfo.lastName = message.readString();
+          driverInfo.shortName = message.readString();
+          driverInfo.category = message.readUInt8(); // TODO: validade id it the same as readByte()
+          driverInfo.nationality = message.readUInt16LE();
+
+          carInfo.drivers.push(driverInfo); 
+        }
+
         break;
       default:
         console.log('Unknown message type');
